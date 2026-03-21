@@ -1,0 +1,13 @@
+[project]
+name = "llm-compare"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "transformers>=4.57.0",
+  "torch>=2.6.0",
+  "accelerate>=1.10.0",
+  "pydantic>=2.8.0",
+  "pydantic-settings>=2.4.0",
+]
