@@ -10,4 +10,5 @@ dependencies = [
   "accelerate>=1.10.0",
   "pydantic>=2.8.0",
   "pydantic-settings>=2.4.0",
+  "huggingface-hub>=1.7.1",
 ]

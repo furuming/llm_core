@@ -20,10 +20,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import login;
+
+
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
-MODEL_ID = "google/gemma-3-4b-it"
+MODEL_ID = "google/gemma-3-1b-it"
+# MODEL_ID = "meta-llama/Llama-3.2-1B"
 
 
 def detect_device() -> str:
@@ -35,7 +39,7 @@ def detect_device() -> str:
 
 
 DEVICE = detect_device()
-
+print(DEVICE)
 
 class CompareRequest(BaseModel):
     prompt: str
@@ -88,11 +92,21 @@ async def generate(req: CompareRequest) -> CompareResponse:
     messages = [
         {"role": "user", "content": req.prompt},
     ]
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+
+    # chat_template が設定されていない場合や、apply_chat_template が例外を投げる場合には
+    # 元のプロンプトをそのまま使うフォールバックを用意する
+    text = req.prompt
+    chat_template = getattr(tokenizer, "chat_template", None)
+    if chat_template is not None:
+        try:
+            text = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                template=chat_template,
+            )
+        except ValueError:
+            text = req.prompt
 
     inputs = tokenizer(text, return_tensors="pt")
     inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
