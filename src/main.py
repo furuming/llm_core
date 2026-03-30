@@ -28,9 +28,8 @@ from infrastructure.settings.config import get_settings
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
-MODEL_ID = "google/gemma-3-1b-it"
-# MODEL_ID = "meta-llama/Llama-3.2-1B"
 SETTINGS = get_settings()
+DEFAULT_MODEL_NAME = SETTINGS.default_model_name
 
 
 def detect_device() -> str:
@@ -70,13 +69,13 @@ class CompareResponse(BaseModel):
 
 @lru_cache
 def get_tokenizer():
-    return AutoTokenizer.from_pretrained(MODEL_ID)
+    return AutoTokenizer.from_pretrained(DEFAULT_MODEL_NAME)
 
 
 @lru_cache
 def get_model():
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
+        DEFAULT_MODEL_NAME,
         # torch_dtype=torch.float16 if DEVICE == "mps" else "auto",
     )
     return model.to(DEVICE)
@@ -140,7 +139,7 @@ async def generate(req: CompareRequest) -> CompareResponse:
     result_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
 
     return CompareResponse(
-        model=MODEL_ID,
+        model=DEFAULT_MODEL_NAME,
         device=DEVICE,
         text=result_text,
         elapsed_sec=elapsed,
