@@ -16,18 +16,21 @@ import time
 from functools import lru_cache
 
 import torch
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from huggingface_hub import login
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from huggingface_hub import login;
 
+from infrastructure.settings.config import get_settings
 
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 MODEL_ID = "google/gemma-3-1b-it"
 # MODEL_ID = "meta-llama/Llama-3.2-1B"
+SETTINGS = get_settings()
 
 
 def detect_device() -> str:
@@ -40,6 +43,17 @@ def detect_device() -> str:
 
 DEVICE = detect_device()
 print(DEVICE)
+
+
+def login_to_huggingface_if_needed() -> None:
+    if not SETTINGS.hf_token:
+        return
+
+    login(token=SETTINGS.hf_token, add_to_git_credential=False, skip_if_logged_in=True)
+
+
+login_to_huggingface_if_needed()
+
 
 class CompareRequest(BaseModel):
     prompt: str
@@ -131,3 +145,7 @@ async def generate(req: CompareRequest) -> CompareResponse:
         text=result_text,
         elapsed_sec=elapsed,
     )
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=SETTINGS.app_port)

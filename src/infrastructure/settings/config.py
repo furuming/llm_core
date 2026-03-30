@@ -1,10 +1,13 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "llm-compare"
+    app_port: int = 9001
     env: str = "local"
-    hf_token: str
+    hf_token: Optional[str] = None
 
     vllm_base_url: str = "http://localhost:8000"
     vllm_api_key: str = "dummy"
