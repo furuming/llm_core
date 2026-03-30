@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     app_port: int = 9001
     env: str = "local"
     hf_token: Optional[str] = None
-    default_model_name: str = "google/gemma-3-1b-it"
+    default_model_family: str = "gemma"
+    default_model_name: str = "google/gemma-3-4b-it"
 
     vllm_base_url: str = "http://localhost:8000"
     vllm_api_key: str = "dummy"
