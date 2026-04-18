@@ -1,16 +1,3 @@
-# from fastapi import FastAPI
-
-# from api.routers.router import router as compare_router
-
-# app = FastAPI(title="LLM Compare API")
-# app.include_router(compare_router)
-
-
-# @app.get("/health")
-# async def health() -> dict:
-#     return {"status": "ok"}
-
-
 import os
 import time
 from functools import lru_cache
@@ -63,6 +50,14 @@ DEVICE = detect_device()
 print(DEVICE)
 
 
+def get_torch_device_name() -> str | None:
+    if DEVICE == "cuda" and torch.cuda.is_available():
+        return torch.cuda.get_device_name(0)
+    if DEVICE == "mps":
+        return "Apple MPS"
+    return None
+
+
 def login_to_huggingface_if_needed() -> None:
     if not SETTINGS.hf_token:
         return
@@ -78,7 +73,7 @@ class CompareRequest(BaseModel):
     model_family: str = Field(
         default=DEFAULT_MODEL_FAMILY,
         examples=["gemma", "llama", "qwen", "phi"],
-        description="モデルファミリーの短い名前を指定する",
+        description="Model family key.",
     )
     max_new_tokens: int = 256
     temperature: float = 0.2
@@ -104,10 +99,7 @@ def get_tokenizer_by_model(model_name: str):
 
 @lru_cache
 def get_model_by_model_name(model_name: str):
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        # torch_dtype=torch.float16 if DEVICE == "mps" else "auto",
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_name)
     return model.to(DEVICE)
 
 
@@ -118,13 +110,18 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_credentials=True,
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "device": DEVICE}
+    return {
+        "status": "ok",
+        "device": DEVICE,
+        "torch_cuda_available": torch.cuda.is_available(),
+        "torch_device_name": get_torch_device_name(),
+    }
 
 
 @app.get("/models", response_model=list[ModelPresetOption])
@@ -156,8 +153,6 @@ async def generate(req: CompareRequest) -> CompareResponse:
         {"role": "user", "content": req.prompt},
     ]
 
-    # chat_template が設定されていない場合や、apply_chat_template が例外を投げる場合には
-    # 元のプロンプトをそのまま使うフォールバックを用意する
     text = req.prompt
     chat_template = getattr(tokenizer, "chat_template", None)
     if chat_template is not None:
@@ -172,14 +167,13 @@ async def generate(req: CompareRequest) -> CompareResponse:
             text = req.prompt
 
     inputs = tokenizer(text, return_tensors="pt")
-    inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+    inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
 
     started = time.perf_counter()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=req.max_new_tokens,
-            # temperature=req.temperature,
             do_sample=req.temperature > 0,
             pad_token_id=tokenizer.eos_token_id,
         )

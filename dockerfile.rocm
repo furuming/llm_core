@@ -1,0 +1,26 @@
+FROM rocm/pytorch:rocm7.2_ubuntu24.04_py3.12_pytorch_release_2.9.1
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+ENV APP_PORT=9000
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
+ENV UV_NO_CACHE=1
+
+COPY . .
+
+RUN uv venv --python /usr/bin/python3 --system-site-packages "${VIRTUAL_ENV}" \
+    && uv pip install \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.30.0" \
+    "transformers>=4.57.0" \
+    "accelerate>=1.10.0" \
+    "pydantic>=2.8.0" \
+    "pydantic-settings>=2.4.0" \
+    "huggingface-hub>=1.7.1" \
+    && uv pip install --no-deps -e ".[rocm]" \
+    && cp .env.example .env
+
+# CMD ["python", "src/main.py"]

@@ -2,11 +2,18 @@ FROM python:3.11
 
 WORKDIR /app
 
-# uv 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV APP_PORT=9000
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+ENV UV_NO_CACHE=1
 
 COPY . .
-RUN cp .env.example .env
 
-# RUN uv sync
+RUN uv venv "${VIRTUAL_ENV}" \
+    && uv pip install -e ".[cuda]" \
+    && cp .env.example .env
+
+CMD ["python", "src/main.py"]
 
