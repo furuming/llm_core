@@ -24,6 +24,26 @@
 ## API/Presentation
 HTTPリクエストの入出力の変換
 
+### `/generate`
+
+`POST /generate` は OpenAI Chat Completions と同じ基本的なメッセージ形式を受け取ります。
+
+```json
+{
+  "model": "gemma",
+  "messages": [
+    {"role": "system", "content": "簡潔に回答してください。"},
+    {"role": "user", "content": "富士山の高さは？"}
+  ],
+  "max_tokens": 256,
+  "temperature": 0.2,
+  "top_p": 1.0
+}
+```
+
+レスポンスも `chat.completion` の形式で、`choices` とトークンの `usage` を返します。
+`model` には `/models` の `family` または `model_name` を指定できます。
+
 
 
 ## 全体像
