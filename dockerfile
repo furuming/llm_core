@@ -1,23 +1,26 @@
-FROM python:3.11
-
-WORKDIR /app
+FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ENV APP_PORT=9000
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
-ENV UV_NO_CACHE=1
+WORKDIR /app
 
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home --shell /bin/bash app \
+    && mkdir -p /models/huggingface \
+    && chown -R app:app /models
 
-# uvインストール
-RUN pip install uv
+ENV APP_PORT=9000 \
+    HF_HOME=/models/huggingface \
+    PATH="/opt/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
 
+# The application itself is mounted by Compose. Keeping only dependencies in
+# the image means source edits made in WSL2 are immediately visible.
 COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --extra cuda
 
-RUN uv sync --system .
+EXPOSE 9000
 
-RUN uv venv "${VIRTUAL_ENV}" \
-    && uv pip install -e ".[cuda]"
-
-CMD ["uvicorn", "app:app", "--reload", "--host", "0.0.0.0"]
+USER app

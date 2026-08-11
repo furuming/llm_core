@@ -1,5 +1,32 @@
 # llm_core
 
+## WSL2 + Docker Compose で起動
+
+Docker Desktop の WSL integration を有効にし、リポジトリを WSL2 の Linux
+ファイルシステム（例: `~/src/llm_core`）に置いて実行します。NVIDIA GPU を使う
+ため、ホスト側には WSL2 対応 NVIDIA ドライバーも必要です。
+
+```bash
+cp .env.example .env
+docker compose build
+docker compose run --rm --service-ports llm-core python src/main.py
+```
+
+Compose はプロジェクト全体を `/app` に bind mount します。そのため、WSL2 側で
+編集したソースはコンテナを再ビルドせずに反映されます。依存関係を変更した場合は
+`docker compose build` を再実行してください。コンテナ内のプロセスは WSL2 の
+標準ユーザーとファイルを共有しやすい `app` ユーザー（UID/GID `1000`）で実行されます。
+
+Hugging Face がダウンロードしたモデルはホストの `./models`（コンテナ内の
+`/models`）に保存されます。コンテナを作り直しても再利用され、ホストからも直接
+確認できます。モデルを削除する場合は `./models` 内の対象ファイルを削除してください。
+
+Dockerfile には開発用の起動コマンドを固定していません。Compose は TTY を有効に
+しているため、必要なコマンドを `docker compose run` で指定できます。
+
+GPU を使わず CPU のみで確認する場合は、`compose.yml` の `gpus: all` を削除して
+起動してください。
+
 ## レイヤーごとの責務
 
 ### Domain
