@@ -2,8 +2,8 @@ import asyncio
 import uuid
 
 from domain.entities.generation_config import GenerationConfig
-from domain.entities.model_target import ModelTarget
 from domain.entities.inference_result import InferenceResult
+from domain.entities.model_target import ModelTarget
 from domain.ports.chat_gateway import ChatGateway
 from domain.ports.result_repository import ResultRepository
 from domain.value_objects.message import Message

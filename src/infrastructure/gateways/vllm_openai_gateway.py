@@ -1,4 +1,5 @@
 import time
+
 from openai import AsyncOpenAI
 
 from domain.entities.generation_config import GenerationConfig

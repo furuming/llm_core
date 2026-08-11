@@ -8,5 +8,4 @@ class ResultRepository(Protocol):
         self,
         comparison_id: str,
         results: list[InferenceResult],
-    ) -> None:
-        ...
+    ) -> None: ...

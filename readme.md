@@ -29,6 +29,10 @@ GPU を使わず CPU のみで確認する場合は、`compose.yml` の `gpus: a
 
 ## レイヤーごとの責務
 
+`src/main.py` はアプリケーション生成とプロセス起動だけを担当します。ルートの組み立ては
+`presentation/app.py`、HTTP ハンドラーとスキーマは `api/`、補完のユースケースロジックは
+`application/services/`、Transformers/Hugging Face への依存は `infrastructure/` に分離しています。
+
 ### Domain
 業務ルールを持つビジネスロジックの中心
 - 比較対象モデル
