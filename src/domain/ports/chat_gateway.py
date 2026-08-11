@@ -11,5 +11,4 @@ class ChatGateway(Protocol):
         model: str,
         messages: list[Message],
         config: GenerationConfig,
-    ) -> InferenceResult:
-        ...
+    ) -> InferenceResult: ...

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,7 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "llm-compare"
     app_port: int = 9001
     env: str = "local"
-    hf_token: Optional[str] = None
+    hf_token: str | None = None
     default_model_family: str = "gemma"
     default_model_name: str = "google/gemma-3-4b-it"
 

@@ -1,6 +1,9 @@
 from functools import lru_cache
 
+from application.services.model_catalog import ModelCatalog
 from application.usecases.llm_models import LLMModelsUseCase
+from domain.entities.model_preset import ModelPreset
+from infrastructure.gateways.transformers_runtime import TransformersRuntime
 from infrastructure.gateways.vllm_openai_gateway import VllmOpenAIGateway
 from infrastructure.repositories.in_memory_result_repository import (
     InMemoryResultRepository,
@@ -23,3 +26,26 @@ def get_usecase() -> LLMModelsUseCase:
         chat_gateway=gateway,
         result_repository=repository,
     )
+
+
+@lru_cache
+def get_model_catalog() -> ModelCatalog:
+    settings = get_settings()
+    return ModelCatalog(
+        (
+            ModelPreset("gemma", "Gemma 3 4B", settings.default_model_name),
+            ModelPreset(
+                "llama", "Llama 3.2 3B Instruct", "meta-llama/Llama-3.2-3B-Instruct"
+            ),
+            ModelPreset("qwen", "Qwen2.5 3B Instruct", "Qwen/Qwen2.5-3B-Instruct"),
+            ModelPreset("qwen-coder", "Qwen2.5 Coder 1.5B", "Qwen/Qwen2.5-Coder-1.5B"),
+            ModelPreset(
+                "phi", "Phi-3.5 Mini Instruct", "microsoft/Phi-3.5-mini-instruct"
+            ),
+        )
+    )
+
+
+@lru_cache
+def get_transformers_runtime() -> TransformersRuntime:
+    return TransformersRuntime()
