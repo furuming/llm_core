@@ -157,7 +157,7 @@ async def models() -> list[ModelPresetOption]:
     ]
 
 
-@app.post("/generate", response_model=GenerateResponse)
+@app.post("/v1/chat/completions", response_model=GenerateResponse)
 async def generate(req: GenerateRequest) -> GenerateResponse:
     preset = MODEL_PRESETS.get(req.model)
     model_name = preset["model_name"] if preset is not None else req.model
