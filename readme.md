@@ -24,9 +24,9 @@
 ## API/Presentation
 HTTPリクエストの入出力の変換
 
-### `/generate`
+### `/v1/chat/completions`
 
-`POST /generate` は OpenAI Chat Completions と同じ基本的なメッセージ形式を受け取ります。
+`POST /v1/chat/completions` は OpenAI Chat Completions と同じ基本的なメッセージ形式を受け取ります。
 
 ```json
 {
