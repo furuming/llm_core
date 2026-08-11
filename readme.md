@@ -71,6 +71,27 @@ HTTPリクエストの入出力の変換
 レスポンスも `chat.completion` の形式で、`choices` とトークンの `usage` を返します。
 `model` には `/models` の `family` または `model_name` を指定できます。
 
+### Continue（VS Code）の autocomplete
+
+Continue の OpenAI provider が利用する legacy Completions 互換の
+`POST /v1/completions` も提供します。補完用には FIM 対応の `qwen-coder`
+プリセットを使用します。Continue の `config.yaml` に次のモデルを追加してください。
+
+```yaml
+models:
+  - name: Local Qwen Coder
+    provider: openai
+    model: qwen-coder
+    apiBase: http://localhost:9000/v1
+    apiKey: dummy
+    roles:
+      - autocomplete
+```
+
+エンドポイントは通常の JSON レスポンスに加え、Continue が指定する
+`stream: true` の SSE レスポンスと、`prompt` / `suffix` による FIM 補完を扱います。
+初回の補完時には Hugging Face からモデルがダウンロードされます。
+
 
 
 ## 全体像
