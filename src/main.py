@@ -1,5 +1,7 @@
 import json
 import os
+import queue
+import threading
 import time
 import uuid
 from functools import lru_cache
@@ -12,7 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from huggingface_hub import login
 from pydantic import BaseModel, Field
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    StoppingCriteria,
+    StoppingCriteriaList,
+    TextIteratorStreamer,
+)
 
 from infrastructure.settings.config import get_settings
 
@@ -237,6 +245,148 @@ def truncate_at_stop(text: str, stop: str | list[str] | None) -> tuple[str, bool
     return text[:min(positions)], True
 
 
+class CancellationStoppingCriteria(StoppingCriteria):
+    def __init__(self, cancelled: threading.Event) -> None:
+        self.cancelled = cancelled
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        return self.cancelled.is_set()
+
+
+def stream_completion_events(
+    *,
+    completion_id: str,
+    created: int,
+    model_name: str,
+    prompt: str,
+    request: CompletionRequest,
+):
+    """Generate tokens in a worker and yield OpenAI-compatible SSE events."""
+    tokenizer = get_tokenizer_by_model(model_name)
+    model = get_model_by_model_name(model_name)
+    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
+    streamer = TextIteratorStreamer(
+        tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
+        timeout=0.1,
+    )
+    cancelled = threading.Event()
+    errors: list[Exception] = []
+    generated_token_counts: list[int] = []
+    generation_options = {
+        "max_new_tokens": request.max_tokens,
+        "do_sample": request.temperature > 0,
+        "pad_token_id": tokenizer.eos_token_id,
+        "streamer": streamer,
+        "stopping_criteria": StoppingCriteriaList(
+            [CancellationStoppingCriteria(cancelled)]
+        ),
+    }
+    if request.temperature > 0:
+        generation_options.update(
+            temperature=request.temperature,
+            top_p=request.top_p,
+        )
+
+    def generate_in_worker() -> None:
+        try:
+            with torch.no_grad():
+                outputs = model.generate(**inputs, **generation_options)
+            generated_token_counts.append(
+                outputs[0].shape[0] - inputs["input_ids"].shape[1]
+            )
+        except Exception as error:
+            errors.append(error)
+            # Unblock the iterator when generation fails before the model ends it.
+            streamer.on_finalized_text("", stream_end=True)
+
+    worker = threading.Thread(target=generate_in_worker, daemon=True)
+    worker.start()
+
+    stops = (
+        []
+        if request.stop is None
+        else [request.stop]
+        if isinstance(request.stop, str)
+        else [value for value in request.stop if value]
+    )
+    retained = ""
+    stopped = False
+    first_chunk = True
+
+    def encode_chunk(text: str, finish_reason: str | None = None) -> str:
+        nonlocal first_chunk
+        if first_chunk and request.echo:
+            text = request.prompt + text
+        first_chunk = False
+        chunk = {
+            "id": completion_id,
+            "object": "text_completion",
+            "created": created,
+            "model": model_name,
+            "choices": [
+                {
+                    "text": text,
+                    "index": 0,
+                    "logprobs": None,
+                    "finish_reason": finish_reason,
+                }
+            ],
+        }
+        return f"data: {json.dumps(chunk)}\n\n"
+
+    try:
+        iterator = iter(streamer)
+        while True:
+            try:
+                text = next(iterator)
+            except queue.Empty:
+                if worker.is_alive():
+                    continue
+                break
+            except StopIteration:
+                break
+
+            retained += text
+            stop_positions = [
+                retained.find(value) for value in stops if retained.find(value) >= 0
+            ]
+            if stop_positions:
+                output = retained[:min(stop_positions)]
+                if output or first_chunk:
+                    yield encode_chunk(output)
+                retained = ""
+                stopped = True
+                cancelled.set()
+                break
+
+            # Keep enough trailing text to detect a stop sequence spanning chunks.
+            keep = max((len(value) - 1 for value in stops), default=0)
+            if len(retained) > keep:
+                output = retained[:-keep] if keep else retained
+                retained = retained[-keep:] if keep else ""
+                if output:
+                    yield encode_chunk(output)
+
+        if errors:
+            raise errors[0]
+        if retained:
+            yield encode_chunk(retained)
+        reached_limit = bool(
+            generated_token_counts
+            and generated_token_counts[0] >= request.max_tokens
+        )
+        finish_reason = "length" if reached_limit and not stopped else "stop"
+        yield encode_chunk("", finish_reason=finish_reason)
+        yield "data: [DONE]\n\n"
+    finally:
+        # Closing the HTTP stream (for example when Continue cancels a stale
+        # suggestion) asks transformers to stop at the next generated token.
+        cancelled.set()
+
+
 app = FastAPI(title="LLM Compare API")
 
 app.add_middleware(
@@ -323,6 +473,20 @@ async def complete(req: CompletionRequest):
     model_name = resolve_model_name(req.model)
     tokenizer = get_tokenizer_by_model(model_name)
     prompt = build_fim_prompt(tokenizer, req.prompt, req.suffix)
+    completion_id = f"cmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+    if req.stream:
+        return StreamingResponse(
+            stream_completion_events(
+                completion_id=completion_id,
+                created=created,
+                model_name=model_name,
+                prompt=prompt,
+                request=req,
+            ),
+            media_type="text/event-stream",
+        )
+
     result_text, prompt_tokens, completion_tokens, finish_reason = generate_text(
         model_name=model_name,
         text=prompt,
@@ -336,8 +500,6 @@ async def complete(req: CompletionRequest):
     if req.echo:
         result_text = req.prompt + result_text
 
-    completion_id = f"cmpl-{uuid.uuid4().hex}"
-    created = int(time.time())
     choice = TextCompletionChoice(text=result_text, finish_reason=finish_reason)
     response = CompletionResponse(
         id=completion_id,
@@ -350,21 +512,7 @@ async def complete(req: CompletionRequest):
             total_tokens=prompt_tokens + completion_tokens,
         ),
     )
-    if not req.stream:
-        return response
-
-    def event_stream():
-        chunk = {
-            "id": completion_id,
-            "object": "text_completion",
-            "created": created,
-            "model": model_name,
-            "choices": [choice.model_dump()],
-        }
-        yield f"data: {json.dumps(chunk)}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return response
 
 
 if __name__ == "__main__":
