@@ -1,6 +1,8 @@
 import os
 import time
+import uuid
 from functools import lru_cache
+from typing import Literal
 
 import torch
 import uvicorn
@@ -68,22 +70,41 @@ def login_to_huggingface_if_needed() -> None:
 login_to_huggingface_if_needed()
 
 
-class CompareRequest(BaseModel):
-    prompt: str
-    model_family: str = Field(
-        default=DEFAULT_MODEL_FAMILY,
-        examples=["gemma", "llama", "qwen", "phi"],
-        description="Model family key.",
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class GenerateRequest(BaseModel):
+    model: str = Field(
+        examples=["gemma", "meta-llama/Llama-3.2-3B-Instruct"],
+        description="A model family key or model identifier returned by /models.",
     )
-    max_new_tokens: int = 256
-    temperature: float = 0.2
+    messages: list[ChatMessage] = Field(min_length=1)
+    max_tokens: int = Field(default=256, ge=1)
+    temperature: float = Field(default=0.2, ge=0, le=2)
+    top_p: float = Field(default=1.0, gt=0, le=1)
 
 
-class CompareResponse(BaseModel):
+class ChatCompletionChoice(BaseModel):
+    index: int
+    message: ChatMessage
+    finish_reason: Literal["stop", "length"]
+
+
+class CompletionUsage(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class GenerateResponse(BaseModel):
+    id: str
+    object: Literal["chat.completion"] = "chat.completion"
+    created: int
     model: str
-    device: str
-    text: str
-    elapsed_sec: float
+    choices: list[ChatCompletionChoice]
+    usage: CompletionUsage
 
 
 class ModelPresetOption(BaseModel):
@@ -136,24 +157,23 @@ async def models() -> list[ModelPresetOption]:
     ]
 
 
-@app.post("/generate", response_model=CompareResponse)
-async def generate(req: CompareRequest) -> CompareResponse:
-    preset = MODEL_PRESETS.get(req.model_family)
-    if preset is None:
+@app.post("/generate", response_model=GenerateResponse)
+async def generate(req: GenerateRequest) -> GenerateResponse:
+    preset = MODEL_PRESETS.get(req.model)
+    model_name = preset["model_name"] if preset is not None else req.model
+    known_model_names = {item["model_name"] for item in MODEL_PRESETS.values()}
+    if model_name not in known_model_names:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown model_family: {req.model_family}",
+            detail=f"Unknown model: {req.model}",
         )
 
-    model_name = preset["model_name"]
     tokenizer = get_tokenizer_by_model(model_name)
     model = get_model_by_model_name(model_name)
 
-    messages = [
-        {"role": "user", "content": req.prompt},
-    ]
+    messages = [message.model_dump() for message in req.messages]
 
-    text = req.prompt
+    text = "\n".join(message.content for message in req.messages)
     chat_template = getattr(tokenizer, "chat_template", None)
     if chat_template is not None:
         try:
@@ -164,29 +184,47 @@ async def generate(req: CompareRequest) -> CompareResponse:
                 template=chat_template,
             )
         except ValueError:
-            text = req.prompt
+            pass
 
     inputs = tokenizer(text, return_tensors="pt")
     inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
 
-    started = time.perf_counter()
+    generation_options = {
+        "max_new_tokens": req.max_tokens,
+        "do_sample": req.temperature > 0,
+        "pad_token_id": tokenizer.eos_token_id,
+    }
+    if req.temperature > 0:
+        generation_options.update(temperature=req.temperature, top_p=req.top_p)
+
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=req.max_new_tokens,
-            do_sample=req.temperature > 0,
-            pad_token_id=tokenizer.eos_token_id,
+            **generation_options,
         )
-    elapsed = time.perf_counter() - started
 
     generated_ids = outputs[0][inputs["input_ids"].shape[1]:]
     result_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
+    prompt_tokens = inputs["input_ids"].shape[1]
+    completion_tokens = len(generated_ids)
+    finish_reason = "length" if completion_tokens >= req.max_tokens else "stop"
 
-    return CompareResponse(
+    return GenerateResponse(
+        id=f"chatcmpl-{uuid.uuid4().hex}",
+        created=int(time.time()),
         model=model_name,
-        device=DEVICE,
-        text=result_text,
-        elapsed_sec=elapsed,
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                message=ChatMessage(role="assistant", content=result_text),
+                finish_reason=finish_reason,
+            )
+        ],
+        usage=CompletionUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        ),
     )
 
 
