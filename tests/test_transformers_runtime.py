@@ -2,14 +2,52 @@ import sys
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from infrastructure.gateways.transformers_runtime import TransformersRuntime
 
 
+class _FakeTensor:
+    def __init__(self, shape: tuple[int, ...]) -> None:
+        self.shape = shape
+
+    def to(self, _device: str):
+        return self
+
+
 class TransformersRuntimeStatusTest(unittest.TestCase):
+    def test_stream_counts_generated_tokens_on_sequence_dimension(self) -> None:
+        runtime = TransformersRuntime(device="cpu")
+        tokenizer = Mock()
+        tokenizer.eos_token_id = 0
+        tokenizer.return_value = {"input_ids": _FakeTensor((1, 3))}
+        model = Mock()
+        model.generate.return_value = [_FakeTensor((1, 5))]
+
+        with patch(
+            "infrastructure.gateways.transformers_runtime.TextIteratorStreamer",
+            return_value=iter(()),
+        ):
+            events = list(
+                runtime._stream_with_model(
+                    tokenizer=tokenizer,
+                    model=model,
+                    completion_id="cmpl-test",
+                    created=0,
+                    model_name="org/model",
+                    prompt="abc",
+                    max_tokens=2,
+                    temperature=0,
+                    top_p=1,
+                    stop=None,
+                    echo_prompt=None,
+                )
+            )
+
+        self.assertIn('"finish_reason": "length"', events[-2])
+
     def test_reports_loaded_models_without_gpu(self) -> None:
         runtime = TransformersRuntime(device="cpu")
         runtime._models = {"org/model-b": object(), "org/model-a": object()}
