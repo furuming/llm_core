@@ -169,12 +169,6 @@ class TransformersRuntime:
             add_special_tokens=True,
         )
 
-        print("=== GENERATE ===")
-        print("text:", repr(text))
-        print("input_ids:", inputs["input_ids"].shape)
-        print("attention_mask:", inputs.get("attention_mask", None))
-        print("================")
-
         inputs = {key: value.to(self.device) for key, value in inputs.items()}
 
         options = {
@@ -278,7 +272,7 @@ class TransformersRuntime:
             try:
                 with torch.no_grad():
                     outputs = model.generate(**inputs, **options)
-                counts.append(outputs[0].shape[0] - inputs["input_ids"].shape[1])
+                counts.append(outputs[0].shape[-1] - inputs["input_ids"].shape[-1])
             except Exception as error:  # noqa: BLE001 - re-raised by the iterator
                 errors.append(error)
                 streamer.on_finalized_text("", stream_end=True)
@@ -341,6 +335,7 @@ class TransformersRuntime:
                     retained = retained[-keep:] if keep else ""
                     if output:
                         yield event(output)
+            worker.join()
             if errors:
                 raise errors[0]
             if retained:

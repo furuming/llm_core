@@ -33,7 +33,7 @@ def get_model_catalog() -> ModelCatalog:
     settings = get_settings()
     return ModelCatalog(
         (
-            ModelPreset("gemma", "Gemma4 E2B", "google/gemma-4-e2b-it"),
+            ModelPreset("gemma", "Gemma 3 4B IT", "google/gemma-3-4b-it"),
             ModelPreset(
                 "llama", "Llama 3.2 3B Instruct", "meta-llama/Llama-3.2-3B-Instruct"
             ),

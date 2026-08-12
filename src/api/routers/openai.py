@@ -33,7 +33,7 @@ def resolve(catalog: ModelCatalog, model: str) -> str:
 
 
 @router.post("/chat/completions", response_model=GenerateResponse)
-async def generate(
+def generate(
     request: GenerateRequest,
     catalog: CatalogDependency,
     runtime: RuntimeDependency,
@@ -76,15 +76,11 @@ async def generate(
 
 
 @router.post("/completions", response_model=CompletionResponse)
-async def complete(
+def complete(
     request: CompletionRequest,
     catalog: CatalogDependency,
     runtime: RuntimeDependency,
 ):
-    print("=== REQUEST ===")
-    print(request.model_dump())
-    print("===============")
-    
     model_name = resolve(catalog, request.model)
     prompt = build_fim_prompt(
         runtime.tokenizer(model_name), request.prompt, request.suffix
