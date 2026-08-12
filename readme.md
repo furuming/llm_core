@@ -152,6 +152,25 @@ curl http://localhost:9000/runtime
 メモリです。GPU がコンテナに公開されていない場合は `available` が `false`、
 `devices` が空配列になります。
 
+### モデルのアンロード
+
+`DELETE /runtime/models/{model}` は、指定したモデルとトークナイザーをプロセスの
+メモリからアンロードし、利用可能な場合はデバイスのキャッシュも解放します。
+`model` には `/models` が返す `family` または URL エンコードした `model_name` を
+指定できます。モデルが既にアンロード済みの場合も成功し、`unloaded` は `false` です。
+
+```bash
+curl -X DELETE http://localhost:9000/runtime/models/qwen-coder
+```
+
+```json
+{
+  "model": "Qwen/Qwen2.5-Coder-1.5B",
+  "unloaded": true,
+  "loaded_models": []
+}
+```
+
 
 
 ## 全体像

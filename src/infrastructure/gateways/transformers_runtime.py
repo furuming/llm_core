@@ -1,3 +1,4 @@
+import gc
 import json
 import os
 import queue
@@ -46,9 +47,10 @@ class TransformersRuntime:
         return "Apple MPS" if self.device == "mps" else None
 
     def tokenizer(self, model_name: str):
-        if model_name not in self._tokenizers:
-            self._tokenizers[model_name] = AutoTokenizer.from_pretrained(model_name)
-        return self._tokenizers[model_name]
+        with self._model_lock:
+            if model_name not in self._tokenizers:
+                self._tokenizers[model_name] = AutoTokenizer.from_pretrained(model_name)
+            return self._tokenizers[model_name]
 
     def model(self, model_name: str):
         with self._model_lock:
@@ -86,6 +88,23 @@ class TransformersRuntime:
                 "devices": devices,
             },
         }
+
+    def unload_model(self, model_name: str) -> bool:
+        """Remove a loaded model and its tokenizer and release cached device memory."""
+        with self._model_lock:
+            model = self._models.pop(model_name, None)
+            tokenizer = self._tokenizers.pop(model_name, None)
+
+        if model is None and tokenizer is None:
+            return False
+
+        del model, tokenizer
+        gc.collect()
+        if self.device == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif self.device == "mps" and torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        return True
 
     def generate(
         self,

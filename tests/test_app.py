@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from api.routers.system import runtime_status
+from api.routers.system import runtime_status, unload_model
 from presentation.app import create_app
 from presentation.dependencies import get_transformers_runtime
 
@@ -37,6 +37,10 @@ class FakeRuntime:
             },
         }
 
+    def unload_model(self, model_name):
+        self.unloaded_model = model_name
+        return model_name == "Qwen/Qwen2.5-Coder-1.5B"
+
 
 class AppTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -62,6 +66,20 @@ class AppTest(unittest.TestCase):
 
     def test_runtime_route_is_offloaded_to_fastapi_thread_pool(self) -> None:
         self.assertFalse(inspect.iscoroutinefunction(runtime_status))
+
+    def test_unload_model_route_resolves_preset(self) -> None:
+        response = self.client.delete("/runtime/models/qwen-coder")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["model"], "Qwen/Qwen2.5-Coder-1.5B")
+        self.assertTrue(response.json()["unloaded"])
+
+    def test_unload_model_route_is_offloaded_to_fastapi_thread_pool(self) -> None:
+        self.assertFalse(inspect.iscoroutinefunction(unload_model))
+
+    def test_unload_unknown_model_returns_bad_request(self) -> None:
+        response = self.client.delete("/runtime/models/unknown")
+        self.assertEqual(response.status_code, 400)
 
     def test_unknown_completion_model_returns_bad_request(self) -> None:
         response = self.client.post(

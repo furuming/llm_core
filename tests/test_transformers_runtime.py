@@ -58,6 +58,45 @@ class TransformersRuntimeStatusTest(unittest.TestCase):
         self.assertEqual(device["process_allocated_bytes"], 500)
         self.assertEqual(device["process_reserved_bytes"], 550)
 
+    def test_unload_model_removes_model_and_tokenizer(self) -> None:
+        runtime = TransformersRuntime(device="cpu")
+        runtime._models = {"org/model": object()}
+        runtime._tokenizers = {"org/model": object()}
+
+        with patch("infrastructure.gateways.transformers_runtime.gc.collect") as collect:
+            unloaded = runtime.unload_model("org/model")
+
+        self.assertTrue(unloaded)
+        self.assertNotIn("org/model", runtime._models)
+        self.assertNotIn("org/model", runtime._tokenizers)
+        collect.assert_called_once_with()
+
+    def test_unload_missing_model_does_not_run_cleanup(self) -> None:
+        runtime = TransformersRuntime(device="cpu")
+
+        with patch("infrastructure.gateways.transformers_runtime.gc.collect") as collect:
+            unloaded = runtime.unload_model("org/missing")
+
+        self.assertFalse(unloaded)
+        collect.assert_not_called()
+
+    def test_unload_cuda_model_releases_cached_memory(self) -> None:
+        runtime = TransformersRuntime(device="cuda")
+        runtime._models = {"org/model": object()}
+
+        with (
+            patch(
+                "infrastructure.gateways.transformers_runtime.torch.cuda.is_available",
+                return_value=True,
+            ),
+            patch(
+                "infrastructure.gateways.transformers_runtime.torch.cuda.empty_cache"
+            ) as empty_cache,
+        ):
+            runtime.unload_model("org/model")
+
+        empty_cache.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

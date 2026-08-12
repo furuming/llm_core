@@ -19,3 +19,9 @@ class VramStatus(BaseModel):
 class RuntimeStatusResponse(BaseModel):
     loaded_models: list[str]
     vram: VramStatus
+
+
+class ModelUnloadResponse(BaseModel):
+    model: str
+    unloaded: bool
+    loaded_models: list[str]
