@@ -158,6 +158,8 @@ curl http://localhost:9000/runtime
 メモリからアンロードし、利用可能な場合はデバイスのキャッシュも解放します。
 `model` には `/models` が返す `family` または URL エンコードした `model_name` を
 指定できます。モデルが既にアンロード済みの場合も成功し、`unloaded` は `false` です。
+対象モデルで推論が実行中の場合は、その推論が終了してメモリを解放できる状態になるまで
+レスポンスを待機します。
 
 ```bash
 curl -X DELETE http://localhost:9000/runtime/models/qwen-coder

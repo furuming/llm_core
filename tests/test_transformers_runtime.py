@@ -1,4 +1,5 @@
 import sys
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -96,6 +97,42 @@ class TransformersRuntimeStatusTest(unittest.TestCase):
             runtime.unload_model("org/model")
 
         empty_cache.assert_called_once_with()
+
+    def test_unload_waits_for_active_inference(self) -> None:
+        runtime = TransformersRuntime(device="cpu")
+        model = object()
+        runtime._models = {"org/model": model}
+        runtime._tokenizers = {"org/model": object()}
+        inference_started = threading.Event()
+        finish_inference = threading.Event()
+        unload_finished = threading.Event()
+
+        def infer() -> None:
+            with runtime._inference("org/model") as (_, active_model):
+                self.assertIs(active_model, model)
+                inference_started.set()
+                finish_inference.wait(timeout=2)
+
+        def unload() -> None:
+            runtime.unload_model("org/model")
+            unload_finished.set()
+
+        inference_thread = threading.Thread(target=infer)
+        unload_thread = threading.Thread(target=unload)
+        inference_thread.start()
+        self.assertTrue(inference_started.wait(timeout=2))
+        unload_thread.start()
+
+        self.assertFalse(unload_finished.wait(timeout=0.05))
+        self.assertIn("org/model", runtime.runtime_status()["loaded_models"])
+        finish_inference.set()
+        inference_thread.join(timeout=2)
+        unload_thread.join(timeout=2)
+
+        self.assertFalse(inference_thread.is_alive())
+        self.assertFalse(unload_thread.is_alive())
+        self.assertTrue(unload_finished.is_set())
+        self.assertNotIn("org/model", runtime.runtime_status()["loaded_models"])
 
 
 if __name__ == "__main__":
