@@ -118,6 +118,40 @@ models:
 `stream: true` の SSE レスポンスと、`prompt` / `suffix` による FIM 補完を扱います。
 初回の補完時には Hugging Face からモデルがダウンロードされます。
 
+### 読み込み済みモデルと VRAM 使用量
+
+`GET /runtime` は、この API プロセスが現在メモリに読み込んでいるモデルと、
+Docker コンテナから見える各 GPU の VRAM 使用量を返します。
+
+```bash
+curl http://localhost:9000/runtime
+```
+
+```json
+{
+  "loaded_models": ["Qwen/Qwen2.5-Coder-1.5B"],
+  "vram": {
+    "available": true,
+    "devices": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 4090",
+        "total_bytes": 25757220864,
+        "free_bytes": 22196219904,
+        "used_bytes": 3561000960,
+        "process_allocated_bytes": 3200000000,
+        "process_reserved_bytes": 3400000000
+      }
+    ]
+  }
+}
+```
+
+`used_bytes` は GPU 全体の使用量、`process_allocated_bytes` と
+`process_reserved_bytes` はこの API プロセスに対して PyTorch が割り当て済み・予約済みの
+メモリです。GPU がコンテナに公開されていない場合は `available` が `false`、
+`devices` が空配列になります。
+
 
 
 ## 全体像

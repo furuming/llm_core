@@ -38,6 +38,7 @@ class TransformersRuntime:
         self.device = device or detect_device()
         self._tokenizers: dict[str, object] = {}
         self._models: dict[str, object] = {}
+        self._model_lock = threading.RLock()
 
     def device_name(self) -> str | None:
         if self.device == "cuda" and torch.cuda.is_available():
@@ -50,12 +51,42 @@ class TransformersRuntime:
         return self._tokenizers[model_name]
 
     def model(self, model_name: str):
-        if model_name not in self._models:
-            self._models[model_name] = AutoModelForCausalLM.from_pretrained(
-                model_name
-            ).to(self.device)
-        return self._models[model_name]
-    
+        with self._model_lock:
+            if model_name not in self._models:
+                self._models[model_name] = AutoModelForCausalLM.from_pretrained(
+                    model_name
+                ).to(self.device)
+            return self._models[model_name]
+
+    def runtime_status(self) -> dict:
+        """Return the models resident in this process and current GPU memory use."""
+        with self._model_lock:
+            loaded_models = sorted(self._models)
+
+        devices = []
+        if torch.cuda.is_available():
+            for index in range(torch.cuda.device_count()):
+                free_bytes, total_bytes = torch.cuda.mem_get_info(index)
+                devices.append(
+                    {
+                        "index": index,
+                        "name": torch.cuda.get_device_name(index),
+                        "total_bytes": total_bytes,
+                        "free_bytes": free_bytes,
+                        "used_bytes": total_bytes - free_bytes,
+                        "process_allocated_bytes": torch.cuda.memory_allocated(index),
+                        "process_reserved_bytes": torch.cuda.memory_reserved(index),
+                    }
+                )
+
+        return {
+            "loaded_models": loaded_models,
+            "vram": {
+                "available": bool(devices),
+                "devices": devices,
+            },
+        }
+
     def generate(
         self,
         *,
@@ -80,10 +111,7 @@ class TransformersRuntime:
         print("attention_mask:", inputs.get("attention_mask", None))
         print("================")
 
-        inputs = {
-            key: value.to(self.device)
-            for key, value in inputs.items()
-        }
+        inputs = {key: value.to(self.device) for key, value in inputs.items()}
 
         options = {
             "max_new_tokens": max_tokens,
@@ -107,11 +135,7 @@ class TransformersRuntime:
         generated_ids = outputs[0][input_length:]
 
         completion_tokens = len(generated_ids)
-        reason = (
-            "length"
-            if completion_tokens >= max_tokens
-            else "stop"
-        )
+        reason = "length" if completion_tokens >= max_tokens else "stop"
 
         return (
             tokenizer.decode(

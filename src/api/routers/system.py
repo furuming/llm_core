@@ -4,6 +4,7 @@ import torch
 from fastapi import APIRouter, Depends
 
 from api.schemas.openai import ModelPresetOption
+from api.schemas.system import RuntimeStatusResponse
 from application.services.model_catalog import ModelCatalog
 from infrastructure.gateways.transformers_runtime import TransformersRuntime
 from presentation.dependencies import get_model_catalog, get_transformers_runtime
@@ -35,3 +36,9 @@ async def models(
         )
         for item in catalog.list()
     ]
+
+
+@router.get("/runtime", response_model=RuntimeStatusResponse)
+def runtime_status(runtime: RuntimeDependency) -> RuntimeStatusResponse:
+    """Collect potentially blocking runtime metrics in FastAPI's thread pool."""
+    return RuntimeStatusResponse.model_validate(runtime.runtime_status())
