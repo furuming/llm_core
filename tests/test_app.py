@@ -1,3 +1,4 @@
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from api.routers.system import runtime_status
 from presentation.app import create_app
 from presentation.dependencies import get_transformers_runtime
 
@@ -57,6 +59,9 @@ class AppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["loaded_models"], ["org/loaded-model"])
         self.assertEqual(response.json()["vram"]["devices"][0]["used_bytes"], 600)
+
+    def test_runtime_route_is_offloaded_to_fastapi_thread_pool(self) -> None:
+        self.assertFalse(inspect.iscoroutinefunction(runtime_status))
 
     def test_unknown_completion_model_returns_bad_request(self) -> None:
         response = self.client.post(

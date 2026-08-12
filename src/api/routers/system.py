@@ -39,5 +39,6 @@ async def models(
 
 
 @router.get("/runtime", response_model=RuntimeStatusResponse)
-async def runtime_status(runtime: RuntimeDependency) -> RuntimeStatusResponse:
+def runtime_status(runtime: RuntimeDependency) -> RuntimeStatusResponse:
+    """Collect potentially blocking runtime metrics in FastAPI's thread pool."""
     return RuntimeStatusResponse.model_validate(runtime.runtime_status())
