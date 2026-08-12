@@ -1,5 +1,27 @@
 # llm_core
 
+本プロジェクトは、LLM基盤として、modelを読み込みLLMを実行し、問い合わせ先に結果を返却する。
+## 実行方法 (How to Run)
+以下のコマンドで実行可能
+```
+make
+```
+動作の確認は以下
+
+```
+curl -X POST http://localhost:9000/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+    "model": "gemma",              
+    "messages": [
+        {"role": "system", "content": "あなたは専門の翻訳家です。"},
+        {"role": "user", "content": "Hello, how are you today?"}
+    ],
+    "max_tokens": 100,
+    "temperature": 0.5
+}'
+```
+
 ## WSL2 + Docker Compose で起動
 
 Docker Desktop の WSL integration を有効にし、リポジトリを WSL2 の Linux

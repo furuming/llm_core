@@ -81,6 +81,10 @@ async def complete(
     catalog: CatalogDependency,
     runtime: RuntimeDependency,
 ):
+    print("=== REQUEST ===")
+    print(request.model_dump())
+    print("===============")
+    
     model_name = resolve(catalog, request.model)
     prompt = build_fim_prompt(
         runtime.tokenizer(model_name), request.prompt, request.suffix
@@ -108,6 +112,7 @@ async def complete(
         temperature=request.temperature,
         top_p=request.top_p,
     )
+
     result, stopped = truncate_at_stop(result, request.stop)
     if stopped:
         reason = "stop"

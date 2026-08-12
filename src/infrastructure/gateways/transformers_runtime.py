@@ -55,7 +55,7 @@ class TransformersRuntime:
                 model_name
             ).to(self.device)
         return self._models[model_name]
-
+    
     def generate(
         self,
         *,
@@ -67,25 +67,58 @@ class TransformersRuntime:
     ) -> tuple[str, int, int, Literal["stop", "length"]]:
         tokenizer = self.tokenizer(model_name)
         model = self.model(model_name)
+
+        inputs = tokenizer(
+            text,
+            return_tensors="pt",
+            add_special_tokens=True,
+        )
+
+        print("=== GENERATE ===")
+        print("text:", repr(text))
+        print("input_ids:", inputs["input_ids"].shape)
+        print("attention_mask:", inputs.get("attention_mask", None))
+        print("================")
+
         inputs = {
             key: value.to(self.device)
-            for key, value in tokenizer(text, return_tensors="pt").items()
+            for key, value in inputs.items()
         }
+
         options = {
             "max_new_tokens": max_tokens,
             "do_sample": temperature > 0,
             "pad_token_id": tokenizer.eos_token_id,
         }
+
         if temperature > 0:
-            options.update(temperature=temperature, top_p=top_p)
+            options.update(
+                temperature=temperature,
+                top_p=top_p,
+            )
+
         with torch.no_grad():
-            outputs = model.generate(**inputs, **options)
-        generated_ids = outputs[0][inputs["input_ids"].shape[1] :]
+            outputs = model.generate(
+                **inputs,
+                **options,
+            )
+
+        input_length = inputs["input_ids"].shape[1]
+        generated_ids = outputs[0][input_length:]
+
         completion_tokens = len(generated_ids)
-        reason = "length" if completion_tokens >= max_tokens else "stop"
+        reason = (
+            "length"
+            if completion_tokens >= max_tokens
+            else "stop"
+        )
+
         return (
-            tokenizer.decode(generated_ids, skip_special_tokens=True),
-            inputs["input_ids"].shape[1],
+            tokenizer.decode(
+                generated_ids,
+                skip_special_tokens=True,
+            ),
+            input_length,
             completion_tokens,
             reason,
         )

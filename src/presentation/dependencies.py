@@ -33,11 +33,11 @@ def get_model_catalog() -> ModelCatalog:
     settings = get_settings()
     return ModelCatalog(
         (
-            ModelPreset("gemma", "Gemma 3 4B", settings.default_model_name),
+            ModelPreset("gemma", "Gemma4 E2B", "google/gemma-4-e2b-it"),
             ModelPreset(
                 "llama", "Llama 3.2 3B Instruct", "meta-llama/Llama-3.2-3B-Instruct"
             ),
-            ModelPreset("qwen", "Qwen2.5 3B Instruct", "Qwen/Qwen2.5-3B-Instruct"),
+            ModelPreset("qwen", "Qwen2.5 7B Instruct", "Qwen/Qwen2.5-7B-Instruct"),
             ModelPreset("qwen-coder", "Qwen2.5 Coder 1.5B", "Qwen/Qwen2.5-Coder-1.5B"),
             ModelPreset(
                 "phi", "Phi-3.5 Mini Instruct", "microsoft/Phi-3.5-mini-instruct"

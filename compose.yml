@@ -22,5 +22,4 @@ services:
         target: /models
     gpus: all
     init: true
-    restart: unless-stopped
     tty: true
